@@ -1,0 +1,8 @@
+kafka:
+  actions:
+    sendEmail:
+      bootstrapServers: "localhost:9092"
+      topic: "topic1"
+    logEvent:
+      bootstrapServers: "localhost:9092"
+      topic: "log-topic"
