@@ -21,7 +21,7 @@ import static com.ubs.kafka_injector.utility.YamlFileReader.loadKafkaConfig;
 public class DynamicKafkaConsumerService {
     private static final Map<String, KafkaConfig> kafkaConfigMap = loadKafkaConfig();
 
-    public List<String> fetchLastMessages(String action) {
+    public List<String> fetchLastMessages(String action, Integer number) {
         KafkaConfig config = kafkaConfigMap.get(action);
         if (config == null) {
             return Collections.singletonList("Invalid action provided!");
@@ -32,22 +32,32 @@ public class DynamicKafkaConsumerService {
 
         Properties props = new Properties();
         props.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        props.put(ConsumerConfig.GROUP_ID_CONFIG, "dynamic-consumer-" + UUID.randomUUID());
+        props.put(ConsumerConfig.GROUP_ID_CONFIG, "dynamic-consumer-" + UUID.randomUUID()); // Random group ID for fresh consumption
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringDeserializer");
-        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
+        props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest"); // Start from the latest if no previous offset
         props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, "false");
 
         List<String> messages = new ArrayList<>();
+        int lastNMessages = number;
 
         try (KafkaConsumer<String, String> consumer = new KafkaConsumer<>(props)) {
-            consumer.subscribe(Collections.singletonList(topic));
+            TopicPartition partition = new TopicPartition(topic, 0);
+            consumer.assign(Collections.singletonList(partition));
+
+            consumer.seekToEnd(Collections.singletonList(partition));
+            long lastOffset = consumer.position(partition);
+
+            long fetchOffset = Math.max(lastOffset - lastNMessages, 0);
+            consumer.seek(partition, fetchOffset);
+
             ConsumerRecords<String, String> records = consumer.poll(Duration.ofSeconds(5));
             for (ConsumerRecord<String, String> record : records) {
                 messages.add(record.value());
             }
         }
         return messages.isEmpty() ? Collections.singletonList("No messages found.") : messages;
+
     }
 
 
